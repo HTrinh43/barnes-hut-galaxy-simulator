@@ -2,6 +2,8 @@ Particle Simulation with MPI and SDL
 Description
 This repository contains a particle simulation application implemented using MPI for parallel processing and SDL for rendering. The simulation models the behavior of particles within a defined space, using the Barnes-Hut algorithm for efficient computation of particle interactions.
 
+![Demo Animation](img/demo.gif)
+
 Features
 MPI-based parallel computation for efficient simulation of large particle systems.
 SDL-based graphical representation of particles.
