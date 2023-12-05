@@ -11,14 +11,46 @@
 #include "io.h"
 #include "node.h"
 #include <mpi.h>
+#include <SDL.h>
 
 const double boundaryXMin = 0.0;
 const double boundaryXMax = 4.0;
 const double boundaryYMin = 0.0;
 const double boundaryYMax = 4.0;
 
+void drawLargerDot(SDL_Renderer* renderer, int x, int y, int radius) {
+    for (int w = -radius; w <= radius; w++) {
+        for (int h = -radius; h <= radius; h++) {
+            SDL_RenderDrawPoint(renderer, x + w, y + h);
+        }
+    }
+}
 
 int main(int argc, char *argv[]) {
+
+    if (SDL_Init(SDL_INIT_VIDEO) < 0) {
+        std::cerr << "SDL could not initialize! SDL_Error: " << SDL_GetError() << std::endl;
+        MPI_Abort(MPI_COMM_WORLD, 1);
+    }
+
+    SDL_Window* sdlWindow = SDL_CreateWindow("Simulation", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, 800, 800, SDL_WINDOW_SHOWN);
+    if (!sdlWindow) {
+        std::cerr << "Window could not be created! SDL_Error: " << SDL_GetError() << std::endl;
+        SDL_Quit();
+        MPI_Abort(MPI_COMM_WORLD, 1);
+    }
+
+    SDL_Renderer* renderer = SDL_CreateRenderer(sdlWindow, -1, SDL_RENDERER_ACCELERATED);
+    if (!renderer) {
+        std::cerr << "Renderer could not be created! SDL_Error: " << SDL_GetError() << std::endl;
+        SDL_DestroyWindow(sdlWindow);
+        SDL_Quit();
+        MPI_Abort(MPI_COMM_WORLD, 1);
+    }
+
+    bool running = true;
+    SDL_Event e;
+
     MPI_Init(&argc, &argv);
     int world_rank, world_size;
     MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
@@ -93,10 +125,6 @@ int main(int argc, char *argv[]) {
         end_index = numBodies - 1;
     }
 
-
-
-
-
     double start;
     double end;
     if (world_rank == 0) {
@@ -114,92 +142,120 @@ int main(int argc, char *argv[]) {
     // Sequential
     // auto start = std::chrono::high_resolution_clock::now();
     int err = 0;
-    for (int a = 0; a < steps; a++) {
+    while (running) {
+        for (int a = 0; a < steps; a++) {
+            // Clear the screen
+            SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);  // Black background
+            SDL_RenderClear(renderer);
 
-        // Allocate memory for bodies on all processes
+            // Draw each body
+            for (int i = 0; i < numBodies; ++i) {
+                int screenX = static_cast<int>(bodies[i].px / 4.0 * 1000);  // Map to screen coordinates
+                int screenY = static_cast<int>(bodies[i].py / 4.0 * 1000);
+                SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);  // White color for bodies
+                // Draw the body as a larger dot
+                int dotRadius = 1;  // Increase this value to make the dot larger
+                drawLargerDot(renderer, screenX, screenY, dotRadius);
+            }
+
+            // Update the screen
+            SDL_RenderPresent(renderer);
+
+            // Handle SDL events (like closing the window)
+            SDL_Event e;
+            while (SDL_PollEvent(&e)) {
+                if (e.type == SDL_QUIT) {
+                    running = false;
+                }
+            }
+
+
+            // Allocate memory for bodies on all processes
+            if (world_size > 1) {
+                err = MPI_Bcast(bodies, numBodies, mpi_body_type, 0, MPI_COMM_WORLD);
+                if (err != MPI_SUCCESS) {
+                    std::cerr << "MPI_Bcast failed on process " << world_rank << std::endl;
+                }
+            }
+            if (bodies != nullptr) {
+                for (int i = 0; i < numBodies; ++i) {
+                    bodies[i].resetForce();
+                    if (bodies[i].mass != -1 && 
+                    (bodies[i].px < boundaryXMin || bodies[i].px > boundaryXMax ||
+                        bodies[i].py < boundaryYMin || bodies[i].py > boundaryYMax)) {
+                        bodies[i].mass = -1; // Mark as lost
+                    }
+                }
+
+                Node *root = new Node(2, 2, 4);
+                for (int i = 0; i < numBodies; i++) {
+                root->insertBody(&bodies[i]);
+                }
+                for (int j = start_index; j <= end_index; j++) {
+                    if (bodies[j].mass == -1) continue;
+                    // check if body is within boundary
+                    if (!root->isWithinBoundary(&bodies[j])) {
+                        bodies[j].mass = -1;
+                        continue;
+                    }
+                    // bodies[i].resetForce();
+                    Vec2 vec = root->calculateForceForBody(&bodies[j], theta, G, rlimit);
+                    bodies[j].fx += vec.x;
+                    bodies[j].fy += vec.y;
+                    bodies[j].update(dt);
+                    local_results.push_back(bodies[j]);
+                }
+                delete root;
+                root = nullptr;
+            } else {
+                std::cerr << "Error: bodies is NULL on process " << world_rank << std::endl;
+            }
+
         if (world_size > 1) {
-            err = MPI_Bcast(bodies, numBodies, mpi_body_type, 0, MPI_COMM_WORLD);
+
+        // send the local results to process 0
+            int local_result_count = local_results.size();
+            std::vector<int> recvcounts(world_size);
+            std::vector<int> displs(world_size);
+            err = MPI_Gather(&local_result_count, 1, MPI_INT, recvcounts.data(), 1, MPI_INT, 0, MPI_COMM_WORLD);
             if (err != MPI_SUCCESS) {
                 std::cerr << "MPI_Bcast failed on process " << world_rank << std::endl;
+                // Handle the error...
             }
-        }
-        if (bodies != nullptr) {
-            for (int i = 0; i < numBodies; ++i) {
-                bodies[i].resetForce();
-                if (bodies[i].mass != -1 && 
-                (bodies[i].px < boundaryXMin || bodies[i].px > boundaryXMax ||
-                    bodies[i].py < boundaryYMin || bodies[i].py > boundaryYMax)) {
-                    bodies[i].mass = -1; // Mark as lost
+            std::vector<Body> all_results;
+            if (world_rank == 0) {
+                // Prepare the displacements and the array to hold all results
+                int total_count = 0;
+                for (int i = 0; i < world_size; ++i) {
+                    displs[i] = total_count;
+                    total_count += recvcounts[i];
                 }
+                all_results.resize(total_count);
             }
+            err = MPI_Gatherv(local_results.data(), local_result_count, mpi_body_type,
+                        all_results.data(), recvcounts.data(), displs.data(), mpi_body_type,
+                        0, MPI_COMM_WORLD);
 
-            Node *root = new Node(2, 2, 4);
-            for (int i = 0; i < numBodies; i++) {
-            root->insertBody(&bodies[i]);
+            if (err != MPI_SUCCESS) {
+                std::cerr << "MPI_Bcast failed on process " << world_rank << std::endl;
+                // Handle the error...
             }
-            for (int j = start_index; j <= end_index; j++) {
-                if (bodies[j].mass == -1) continue;
-                // check if body is within boundary
-                if (!root->isWithinBoundary(&bodies[j])) {
-                    bodies[j].mass = -1;
-                    continue;
-                }
-                // bodies[i].resetForce();
-                Vec2 vec = root->calculateForceForBody(&bodies[j], theta, G, rlimit);
-                bodies[j].fx += vec.x;
-                bodies[j].fy += vec.y;
-                bodies[j].update(dt);
-                local_results.push_back(bodies[j]);
+            
+            if (world_rank == 0) {
+                delete[] bodies;
+                bodies = new Body[numBodies];
+
+                // Copy results from all_results to bodies
+                std::copy(all_results.begin(), all_results.end(), bodies);
+
             }
-            delete root;
-            root = nullptr;
-        } else {
-            std::cerr << "Error: bodies is NULL on process " << world_rank << std::endl;
-        }
-
-    if (world_size > 1) {
-
-    // send the local results to process 0
-        int local_result_count = local_results.size();
-        std::vector<int> recvcounts(world_size);
-        std::vector<int> displs(world_size);
-        err = MPI_Gather(&local_result_count, 1, MPI_INT, recvcounts.data(), 1, MPI_INT, 0, MPI_COMM_WORLD);
-        if (err != MPI_SUCCESS) {
-            std::cerr << "MPI_Bcast failed on process " << world_rank << std::endl;
-            // Handle the error...
-        }
-        std::vector<Body> all_results;
-        if (world_rank == 0) {
-            // Prepare the displacements and the array to hold all results
-            int total_count = 0;
-            for (int i = 0; i < world_size; ++i) {
-                displs[i] = total_count;
-                total_count += recvcounts[i];
+            local_results.clear();
+            all_results.clear();
             }
-            all_results.resize(total_count);
-        }
-        err = MPI_Gatherv(local_results.data(), local_result_count, mpi_body_type,
-                    all_results.data(), recvcounts.data(), displs.data(), mpi_body_type,
-                    0, MPI_COMM_WORLD);
-
-        if (err != MPI_SUCCESS) {
-            std::cerr << "MPI_Bcast failed on process " << world_rank << std::endl;
-            // Handle the error...
-        }
-        
-        if (world_rank == 0) {
-            delete[] bodies;
-            bodies = new Body[numBodies];
-
-            // Copy results from all_results to bodies
-            std::copy(all_results.begin(), all_results.end(), bodies);
-
-        }
-        local_results.clear();
-        all_results.clear();
         }
     }
-    // printf("worldrank %d End loop\n", world_rank);
+
+
 
     if (print_flag == 1 && world_rank == 0) {
         std::cout << "Process " << world_rank <<  std::endl;
@@ -221,6 +277,10 @@ int main(int argc, char *argv[]) {
         writeOutputData(outputfilename, bodies, numBodies);
     }
     // Free memory
+    // Cleanup
+    SDL_DestroyRenderer(renderer);
+    SDL_DestroyWindow(sdlWindow);
+    SDL_Quit();
     delete bodies;
     MPI_Type_free(&mpi_body_type);
     MPI_Finalize();
