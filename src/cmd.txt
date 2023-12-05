@@ -1,0 +1,9 @@
+mpirun -np 1 ./bin/nbody -i input/nb-10.txt -s 1 -t 1.0 -d 0.03
+gcc src/body.cpp src/io.cpp src/node.cpp src/sequential.cpp -o sequential -lstdc++ -lm 
+gcc src/body.cpp src/io.cpp src/node.cpp src/mpi.cpp -o nbody -lstdc++ -lm 
+./sequential -i input/nb-100000.txt -s 10 -t 0.5 -p
+./nbody -i input/nb-100000.txt -s 10 -t 0.5 -p
+
+
+mpicxx -o nbody src/mpi.cpp src/body.cpp src/io.cpp src/node.cpp 
+
