@@ -31,14 +31,14 @@ To run the simulation, use the following command:
 ```
 mpiexec -n <number_of_processes> ./nbody -i <input_file> -o <output_file> -s <steps> -t <theta> -d <delta_time> [-V] [-p]
 ```
-<number_of_processes>: Number of MPI processes to use.
-<input_file>: Path to the input file containing initial particle states.
-<output_file>: Path to save the simulation output.
-<steps>: Number of simulation steps.
-<theta>: Threshold value for the Barnes-Hut algorithm.
-<delta_time>: Time step for the simulation.
--V: (Optional) Enable visualization with SDL.
--p: (Optional) Enable printing of particle states.
+**<number_of_processes>**: Number of MPI processes to use.
+**<input_file>**: Path to the input file containing initial particle states.
+**<output_file>**: Path to save the simulation output.
+**<steps>**: Number of simulation steps.
+**<theta>**: Threshold value for the Barnes-Hut algorithm.
+**<delta_time>**: Time step for the simulation.
+**-V**: (Optional) Enable visualization with SDL.
+**-p**: (Optional) Enable printing of particle states.
 
 ### Contributing
 Contributions to this project are welcome. Please follow these steps:
