@@ -17,20 +17,20 @@ C++ compiler (e.g., GCC)
 Installation
 Cloning the Repository
 To clone the repository, run:
-
+```
 git clone https://github.com/HTrinh43/barnes-hut-galaxy-simulator.git
 cd barnes-hut-galaxy-simulator
-
+```
 ### Building the Application
 To build the application, run:
-
+```
 mpicxx -o nbody src/mpi.cpp src/body.cpp src/io.cpp src/node.cpp $(sdl2-config --cflags --libs)
-
+```
 ### Usage
 To run the simulation, use the following command:
-
+```
 mpiexec -n <number_of_processes> ./nbody -i <input_file> -o <output_file> -s <steps> -t <theta> -d <delta_time> [-V] [-p]
-
+```
 <number_of_processes>: Number of MPI processes to use.
 <input_file>: Path to the input file containing initial particle states.
 <output_file>: Path to save the simulation output.
