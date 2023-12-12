@@ -1,14 +1,14 @@
-Particle Simulation with MPI and SDL
-Description
+#Particle Simulation with MPI and SDL#
+###Description###
 This repository contains a particle simulation application implemented using MPI for parallel processing and SDL for rendering. The simulation models the behavior of particles within a defined space, using the Barnes-Hut algorithm for efficient computation of particle interactions.
 
 ![Demo Animation](img/1000-particles.gif)
 
-Features
+###Features###
 MPI-based parallel computation for efficient simulation of large particle systems.
 SDL-based graphical representation of particles.
 Configurable simulation parameters such as boundary size, particle count, and simulation steps.
-Prerequisites
+###Prerequisites###
 Before you start, ensure you have the following installed:
 
 An MPI implementation (e.g., MPICH, OpenMPI)
@@ -21,12 +21,12 @@ To clone the repository, run:
 git clone https://github.com/HTrinh43/barnes-hut-galaxy-simulator.git
 cd barnes-hut-galaxy-simulator
 
-Building the Application
+###Building the Application###
 To build the application, run:
 
 mpicxx -o nbody src/mpi.cpp src/body.cpp src/io.cpp src/node.cpp $(sdl2-config --cflags --libs)
 
-Usage
+###Usage###
 To run the simulation, use the following command:
 
 mpiexec -n <number_of_processes> ./nbody -i <input_file> -o <output_file> -s <steps> -t <theta> -d <delta_time> [-V] [-p]
@@ -40,7 +40,7 @@ mpiexec -n <number_of_processes> ./nbody -i <input_file> -o <output_file> -s <st
 -V: (Optional) Enable visualization with SDL.
 -p: (Optional) Enable printing of particle states.
 
-Contributing
+###Contributing###
 Contributions to this project are welcome. Please follow these steps:
 
 Fork the repository.
